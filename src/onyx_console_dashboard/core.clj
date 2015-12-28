@@ -10,38 +10,21 @@
 (def scr (s/get-screen))
 
 ;; Put into lib-onyx
-(defn replica-at
-  [job-scheduler messenger peer-log message-id]
-  (reduce #(extensions/apply-log-entry %2 %1)
-          (assoc base-replica
-                 :job-scheduler job-scheduler
-                 :messaging {:onyx.messaging/impl messenger})
-          (take-while (fn [entry] (<= (:message-id entry) message-id))
-                      peer-log)))
+(defn replicas
+  [job-scheduler messenger peer-log]
+  (vec 
+    (reductions #(extensions/apply-log-entry %2 %1)
+                (assoc base-replica
+                       :job-scheduler job-scheduler
+                       :messaging {:onyx.messaging/impl messenger})
+                peer-log)))
 
-(def peer-log 
+(defn sanitize-peer-log [peer-log]
   (clojure.walk/prewalk (fn [x] 
                           (cond (= x 'Infinity)
                                 Double/POSITIVE_INFINITY
                                 :else x)) 
-                        (:peer-log (read-string (slurp "/Users/lucas/20151224T044824.000Z/results.edn")))))
-
-(comment 
-  (def joiners 
-  (set (map :joiner (map :args (filter #(= (:fn %) :prepare-join-cluster) (:peer-log (read-string (slurp "/Users/lucas/20151224T044824.000Z/results.edn"))))))))
-
-(def accepters
-  (set (map :subject (map :args (filter #(= (:fn %) :accept-join-cluster) (:peer-log (read-string (slurp "/Users/lucas/20151224T044824.000Z/results.edn"))))))))
-
-(def abort
-  (set (map :id (map :args (filter #(= (:fn %) :abort-join-cluster) (:peer-log (read-string (slurp "/Users/lucas/20151224T044824.000Z/results.edn"))))))))
-
-(def leaves
-  (set (map :id (map :args (filter #(= (:fn %) :leave-cluster) (:peer-log (read-string (slurp "/Users/lucas/20151224T044824.000Z/results.edn"))))))))
-(def final-replica 
-  (replica-at :onyx.job-scheduler/greedy :aeron peer-log 7791))
-)
-
+                        peer-log))
 
 
 
@@ -52,7 +35,7 @@
              (range y-start 100000)
              lines)))
 
-(defn render-loop! [scr]
+(defn render-loop! [scr peer-log replicas]
   (loop [[cols rows] (s/get-size scr)
          key-val :unhandled 
          curr-entry 0]
@@ -64,9 +47,12 @@
     (s/clear scr)
 
     (let [new-curr-entry (cond 
-                           (= key-val :down)
+                           (and (= key-val :down)
+                                (< curr-entry 
+                                   (dec (count peer-log))))
                            (inc curr-entry)
-                           (= key-val :up)
+                           (and (= key-val :up)
+                                (pos? curr-entry))
                            (dec curr-entry)
                            :else curr-entry)
           entry-lines (clojure.string/split 
@@ -75,16 +61,12 @@
                                         {:width cols})) #"\n")
           replica-lines (clojure.string/split 
                           (with-out-str (fipp/pprint 
-                                          (replica-at :onyx.job-scheduler/greedy 
-                                                      :aeron
-                                                      peer-log
-                                                      new-curr-entry)                                     
-                                          {:width cols})) #"\n")
-          
-          ]
+                                          (replicas new-curr-entry)                                     
+                                          {:width cols})) #"\n")]
 
-      (render-lines scr 0 entry-lines :green)
-      (render-lines scr (inc (count entry-lines)) replica-lines :white)
+      (render-lines scr 0 [(str new-curr-entry)] :red)
+      (render-lines scr 1 entry-lines :green)
+      (render-lines scr (+ 2 (count entry-lines)) replica-lines :white)
 
       (s/redraw scr)
 
@@ -98,4 +80,9 @@
   [& args]
 
   (s/start scr)
-  (render-loop! scr))
+  (let [peer-log (->> (slurp "/Users/lucas/onyx/onyx/peer.edn")
+                      read-string
+                      sanitize-peer-log)
+        
+        replicas (replicas :onyx.job-scheduler/greedy :aeron peer-log)] 
+    (render-loop! scr peer-log replicas)))
