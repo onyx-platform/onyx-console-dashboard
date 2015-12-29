@@ -56,16 +56,16 @@
                                 (pos? curr-entry))
                            (dec curr-entry)
                            :else curr-entry)
+          log-entry ((:log @state) new-curr-entry)
+          replica ((:replicas @state) new-curr-entry)                                     
           entry-lines (clojure.string/split 
-                        (with-out-str (fipp/pprint 
-                                        ((:log @state) new-curr-entry)
-                                        {:width cols})) #"\n")
+                        (with-out-str (fipp/pprint log-entry
+                                                   {:width cols})) #"\n")
           replica-lines (clojure.string/split 
-                          (with-out-str (fipp/pprint 
-                                          ((:replicas @state) new-curr-entry)                                     
-                                          {:width cols})) #"\n")]
+                          (with-out-str (fipp/pprint replica
+                                                     {:width cols})) #"\n")]
 
-      (render-lines scr 0 [(str new-curr-entry)] :red)
+      (render-lines scr 0 [(str new-curr-entry " - " (java.util.Date. (:created-at log-entry)))] :red)
       (render-lines scr 1 entry-lines :green)
       (render-lines scr (+ 2 (count entry-lines)) replica-lines :white)
 
@@ -86,11 +86,11 @@
         (swap! state update :replicas (fn [replicas] (conj replicas (extensions/apply-log-entry entry (last replicas)))))
         (recur (<!! ch))))))
 
-(defn import-edn-log! [filename]
-  (let [peer-log (->> (slurp filename)
-                      read-string
-                      sanitize-peer-log)
-        replicas (replicas :onyx.job-scheduler/greedy :aeron peer-log)]
+(defn slurp-edn [filename]
+  (read-string (slurp filename)))
+
+(defn import-peer-log! [peer-log]
+  (let [replicas (replicas :onyx.job-scheduler/greedy :aeron (sanitize-peer-log peer-log))]
     (reset! state {:replicas replicas :log peer-log})))
 
 (defn -main
@@ -104,7 +104,8 @@
 
                    :log [nil]})
     (case type
-      "edn" (import-edn-log! src)
+      "edn" (import-peer-log! (slurp-edn src))
+      "jepsen" (import-peer-log! (:peer-log (slurp-edn src)))
       "zookeeper" (import-zookeeper! peer-config src))
 
     (s/start scr)
