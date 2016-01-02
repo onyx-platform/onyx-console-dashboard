@@ -13,17 +13,16 @@
 (defn replicas
   [initial-replica peer-log]
   (vec 
-    (rest 
-      (reductions #(extensions/apply-log-entry %2 %1)
-                  initial-replica 
-                  peer-log))))
+    (reductions #(extensions/apply-log-entry %2 %1)
+                initial-replica 
+                peer-log)))
 
 (defn diffs [replicas]
   (vec 
     (pmap (fn [index] 
-           (clojure.data/diff (replicas (dec index)) 
-                              (replicas index)))
-         (range 1 (count replicas)))))
+           (clojure.data/diff (replicas index) 
+                              (replicas (inc index))))
+         (range 0 (dec (count replicas))))))
 
 (defn sanitize-peer-log [peer-log]
   (clojure.walk/prewalk (fn [x] 
@@ -46,7 +45,7 @@
           {:replicas [(assoc base-replica
                              :job-scheduler (:onyx.peer/job-scheduler peer-config)
                              :messaging {:onyx.messaging/impl (:onyx.messaging/impl peer-config)})]
-           :entry 1
+           :entry 0
            :mode :replica
            :diffs [nil]
            :log [nil]}))
@@ -125,8 +124,11 @@
           entry-lines (to-text-lines log-entry cols) 
           replica-lines (to-text-lines replica cols) 
           diff-lines (mapv #(to-text-lines % cols) diff) 
-          panels (cond-> [{:lines [(str curr-entry " - " (when-let [created-at (:created-at log-entry)] 
-                                                           (java.util.Date. created-at)))] 
+          panels (cond-> [{:lines [(str (when-let [message-id (:message-id log-entry)]
+                                          message-id) 
+                                        " - " 
+                                        (when-let [created-at (:created-at log-entry)] 
+                                          (java.util.Date. created-at)))] 
                            :colour :yellow}
                           {:lines entry-lines
                            :colour :blue}]
@@ -165,8 +167,8 @@
 (defn import-peer-log! [peer-log]
   {:post [(= (count (:replicas @state)) (count (:diffs @state)))]}
   (swap! state (fn [st]
-                 (let [initial-replica (first (:replicas @state))
-                       all-replicas (into [initial-replica] (replicas initial-replica (sanitize-peer-log peer-log)))] 
+                 (let [initial-replica (first (:replicas st))
+                       all-replicas (replicas initial-replica (sanitize-peer-log peer-log))] 
                    (-> st 
                        (assoc :replicas all-replicas)
                        (update :log into peer-log)
@@ -178,10 +180,11 @@
            (let [filtered (filter (fn [[replica diff]]
                                     (get (set (map str (flatten-anything (butlast diff)))) 
                                          (str value))) 
-                                  (map list (:replicas st) (:diffs st)))
+                                  (map list (:replicas st) (:diffs st) (:log st)))
                  new-replicas (mapv first filtered)
-                 new-diffs (mapv second filtered)]
-             (assoc st :replicas new-replicas :diffs new-diffs)))))
+                 new-diffs (mapv second filtered)
+                 new-logs (mapv last filtered)]
+             (assoc st :replicas new-replicas :diffs new-diffs :log new-logs)))))
 
 (defn start! [type src filtered]
   (let [peer-config (read-string (slurp "peer-config.edn"))]
