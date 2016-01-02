@@ -6,8 +6,7 @@
             [clojure.data]
             [clojure.core.async :refer [chan >!! <!! close! alts!! timeout go]]
             [fipp.clojure :as fipp]
-            [onyx.log.replica :refer [base-replica]])
-  (:gen-class))
+            [onyx.log.replica :refer [base-replica]]))
 
 (def scr (s/get-screen))
 
@@ -21,7 +20,7 @@
 
 (defn diffs [replicas]
   (vec 
-    (map (fn [index] 
+    (pmap (fn [index] 
            (clojure.data/diff (replicas (dec index)) 
                               (replicas index)))
          (range 1 (count replicas)))))
@@ -49,6 +48,7 @@
                              :messaging {:onyx.messaging/impl (:onyx.messaging/impl peer-config)})]
            :entry 1
            :mode :replica
+           :diffs [nil]
            :log [nil]}))
 
 (defn to-text-lines [v cols]
@@ -63,13 +63,13 @@
           0
           panels))
 
-(defn flatten-map [coll]
+(defn flatten-anything [coll]
   (cond (or (sequential? coll)
             (set? coll))
-        (mapcat flatten-map coll)
+        (mapcat flatten-anything coll)
         (map? coll)
-        (into (mapcat flatten-map (keys coll))
-              (mapcat flatten-map (vals coll)))
+        (into (mapcat flatten-anything (keys coll))
+              (mapcat flatten-anything (vals coll)))
         :else
         [coll]))
 
@@ -77,8 +77,7 @@
   (swap! state 
          (fn [st] 
            (let [curr-entry (:entry st)
-                 ;; todo, if in filter mode, this should be a diff count
-                 log-count (count (:log st))
+                 log-count (count (:replicas st))
                  new-entry (cond 
                              (= key-val :page-down)
                              (min (dec log-count)
@@ -126,7 +125,8 @@
           entry-lines (to-text-lines log-entry cols) 
           replica-lines (to-text-lines replica cols) 
           diff-lines (mapv #(to-text-lines % cols) diff) 
-          panels (cond-> [{:lines [(str curr-entry " - " (java.util.Date. (:created-at log-entry)))] 
+          panels (cond-> [{:lines [(str curr-entry " - " (when-let [created-at (:created-at log-entry)] 
+                                                           (java.util.Date. created-at)))] 
                            :colour :yellow}
                           {:lines entry-lines
                            :colour :blue}]
@@ -140,7 +140,6 @@
                                                        :colour :white}]))]
 
       (render-panels! panels)
-
       (s/redraw scr)
 
       (recur (s/get-size scr)
@@ -153,26 +152,38 @@
                           (assoc :onyx/id onyx-id)
                           (onyx.api/subscribe-to-log ch))] 
       (loop [entry (<!! ch)]
-        (swap! state update :log conj entry)
-        ;; TODO, add diff
-        (swap! state update :replicas (fn [replicas] (conj replicas (extensions/apply-log-entry entry (last replicas)))))
+        (let [prev-replica (last replicas)
+              new-replica (extensions/apply-log-entry entry prev-replica)]
+          (swap! state update :log conj entry)
+          (swap! state update :diffs conj (clojure.data/diff prev-replica new-replica))
+          (swap! state update :replicas (fn [replicas] (conj replicas new-replica))))
         (recur (<!! ch))))))
 
 (defn slurp-edn [filename]
   (read-string (slurp filename)))
 
-;; FIXME import 
 (defn import-peer-log! [peer-log]
-    (swap! state (fn [st]
-                   (let [initial-replica (first (:replicas @state))
-                         all-replicas (into [initial-replica] (replicas initial-replica (sanitize-peer-log peer-log)))] 
-                     (-> st 
-                         (update :log into peer-log)
-                         (assoc :replicas all-replicas)
-                         (assoc :diffs (diffs all-replicas)))))))
+  {:post [(= (count (:replicas @state)) (count (:diffs @state)))]}
+  (swap! state (fn [st]
+                 (let [initial-replica (first (:replicas @state))
+                       all-replicas (into [initial-replica] (replicas initial-replica (sanitize-peer-log peer-log)))] 
+                   (-> st 
+                       (assoc :replicas all-replicas)
+                       (update :log into peer-log)
+                       (update :diffs into (diffs all-replicas)))))))
 
-(defn -main
-  [& [type src]]
+(defn filter! [value]
+  (swap! state 
+         (fn [st] 
+           (let [filtered (filter (fn [[replica diff]]
+                                    (get (set (map str (flatten-anything (butlast diff)))) 
+                                         (str value))) 
+                                  (map list (:replicas st) (:diffs st)))
+                 new-replicas (mapv first filtered)
+                 new-diffs (mapv second filtered)]
+             (assoc st :replicas new-replicas :diffs new-diffs)))))
+
+(defn start! [type src filtered]
   (let [peer-config (read-string (slurp "peer-config.edn"))]
     (initialise-state! peer-config)
 
@@ -181,5 +192,12 @@
       "jepsen" (import-peer-log! (:peer-log (slurp-edn src)))
       "zookeeper" (import-zookeeper! peer-config src)))
 
-    (s/start scr)
-    (render-loop! scr))
+  (when filtered 
+    (filter! filtered))
+
+  (s/start scr)
+  (render-loop! scr))
+
+(defn -main
+  [& [type src filtered]]
+  (start! type src filtered))
