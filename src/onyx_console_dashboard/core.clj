@@ -37,6 +37,25 @@
 
 (def state (atom nil))
 
+(defn initialise-state! [peer-config]
+  {:replicas [(assoc base-replica
+                     :job-scheduler (:onyx.peer/job-scheduler peer-config)
+                     :messaging {:onyx.messaging/impl (:onyx.messaging/impl peer-config)})]
+   :mode :replica
+   :log [nil]})
+
+(defn to-text-lines [v cols]
+  (clojure.string/split 
+    (with-out-str (fipp/pprint v
+                               {:width cols})) #"\n"))
+
+(defn render-panels! [panels]
+  (reduce (fn [y {:keys [lines colour]}]
+            (render-lines scr y lines colour)         
+            (+ y (count lines))) 
+          0
+          panels))
+
 (defn render-loop! [scr]
   (loop [[cols rows] (s/get-size scr)
          key-val :unhandled 
@@ -66,7 +85,7 @@
 
                            (= key-val :page-up)
                            (max 0 (- curr-entry 10))
-                           
+
                            (= key-val :up)
                            (max 0 (dec curr-entry))
 
@@ -77,21 +96,24 @@
           prev-replica (get (:replicas @state) (dec new-curr-entry) base-replica)
           ;; TODO, show both
           diff (clojure.data/diff prev-replica replica)
-          entry-lines (clojure.string/split 
-                        (with-out-str (fipp/pprint log-entry
-                                                   {:width cols})) #"\n")
-          replica-lines (clojure.string/split 
-                          (with-out-str (fipp/pprint replica
-                                                     {:width cols})) #"\n")
-          diff-lines (clojure.string/split 
-                       (with-out-str (fipp/pprint diff
-                                                  {:width cols})) #"\n")]
+          entry-lines (to-text-lines log-entry cols) 
+          replica-lines (to-text-lines replica cols) 
+          diff-lines (mapv #(to-text-lines % cols) diff) 
+          panels (cond-> [{:lines [(str new-curr-entry " - " (java.util.Date. (:created-at log-entry)))] 
+                           :colour :yellow}
 
-      (render-lines scr 0 [(str new-curr-entry " - " (java.util.Date. (:created-at log-entry)))] :red)
-      (render-lines scr 1 entry-lines :green)
-      (case (:mode @state)
-        :diff (render-lines scr (+ 2 (count entry-lines)) diff-lines :white)
-        :replica (render-lines scr (+ 2 (count entry-lines)) replica-lines :white))
+                          {:lines entry-lines
+                           :colour :blue}]
+                   (= :diff (:mode @state)) (into [{:lines (diff-lines 0) 
+                                                    :colour :red}
+                                                   {:lines (diff-lines 1) 
+                                                    :colour :green}
+                                                   {:lines (diff-lines 2) 
+                                                    :colour :white}])
+                   (= :replica (:mode @state)) (into [{:lines replica-lines
+                                                       :colour :white}]))]
+
+      (render-panels! panels)
 
       (s/redraw scr)
 
@@ -121,17 +143,13 @@
 
 (defn -main
   [& [type src]]
-
   (let [peer-config (read-string (slurp "peer-config.edn"))]
-    (reset! state {:replicas [(assoc base-replica
-                                     :job-scheduler (:onyx.peer/job-scheduler peer-config)
-                                     :messaging {:onyx.messaging/impl (:onyx.messaging/impl peer-config)})]
-                   :mode :replica
-                   :log [nil]})
+    (initialise-state! peer-config)
     (case type
       "edn" (import-peer-log! (slurp-edn src))
       "jepsen" (import-peer-log! (:peer-log (slurp-edn src)))
-      "zookeeper" (import-zookeeper! peer-config src))
+      "zookeeper" 
+      (import-zookeeper! peer-config src)))
 
     (s/start scr)
-    (render-loop! scr)))
+    (render-loop! scr))
