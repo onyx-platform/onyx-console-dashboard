@@ -159,19 +159,19 @@
              (s/get-key-blocking scr)))))
 
 (defn import-zookeeper! [peer-config onyx-id]
-  (future 
+  (future
     (let [ch (chan)
           started-sub (-> peer-config
                           (assoc :onyx/id onyx-id)
                           (onyx.api/subscribe-to-log ch))] 
       (loop [entry (<!! ch)]
-        (let [prev-replica (last replicas)
-              new-replica (extensions/apply-log-entry entry prev-replica)]
-          (swap! state (fn [st]
+        (swap! state (fn [st]
+                       (let [prev-replica (last (:replicas st))
+                             new-replica (extensions/apply-log-entry entry prev-replica)]
                          (-> st 
                              (update :log conj entry)
                              (update :diffs conj (clojure.data/diff prev-replica new-replica))
-                             (update :replicas (fn [replicas] (conj replicas new-replica)))))))
+                             (update :replicas conj new-replica)))))
         (recur (<!! ch))))))
 
 (defn slurp-edn [filename]
@@ -212,6 +212,8 @@
     (filter! filtered))
 
   (s/start scr)
+   ;; work around initial draw issues
+  (s/get-key scr) (s/redraw scr)
   (render-loop! scr))
 
 (defn -main
