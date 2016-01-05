@@ -46,6 +46,7 @@
                              :job-scheduler (:onyx.peer/job-scheduler peer-config)
                              :messaging {:onyx.messaging/impl (:onyx.messaging/impl peer-config)})]
            :entry 0
+           :scroll-offset 0
            :mode :replica
            :diffs [nil]
            :log [nil]}))
@@ -55,11 +56,13 @@
     (with-out-str 
       (fipp/pprint v {:width cols})) #"\n"))
 
-(defn render-panels! [panels]
-  (reduce (fn [y {:keys [lines colour]}]
-            (render-lines scr y lines colour)         
-            (+ y (count lines))) 
-          0
+(defn render-panels! [panels scroll-offset]
+  (reduce (fn [[scroll-offset y] {:keys [lines colour]}]
+            (let [rendered-lines (drop scroll-offset lines)
+                  rendered-count (count rendered-lines)] 
+              (render-lines scr y rendered-lines colour)         
+              [(max 0 (- scroll-offset rendered-count)) (+ y rendered-count)])) 
+          [scroll-offset 0]
           panels))
 
 (defn flatten-anything [coll]
@@ -73,6 +76,13 @@
         [coll]))
 
 (defn handle-paging! [key-val]
+  (swap! state update :scroll-offset (fn [y] 
+                                       (case key-val
+                                         \j (max 0 (inc y))
+                                         \k (dec y)
+                                         y))))
+
+(defn handle-playback! [key-val]
   (swap! state 
          (fn [st] 
            (let [curr-entry (:entry st)
@@ -114,6 +124,7 @@
       (s/stop scr))
 
     (handle-mode-switch! key-val)
+    (handle-playback! key-val)
     (handle-paging! key-val)
     (s/clear scr)
 
@@ -141,7 +152,7 @@
                    (= :replica (:mode @state)) (into [{:lines replica-lines
                                                        :colour :white}]))]
 
-      (render-panels! panels)
+      (render-panels! panels (:scroll-offset @state))
       (s/redraw scr)
 
       (recur (s/get-size scr)
@@ -156,9 +167,11 @@
       (loop [entry (<!! ch)]
         (let [prev-replica (last replicas)
               new-replica (extensions/apply-log-entry entry prev-replica)]
-          (swap! state update :log conj entry)
-          (swap! state update :diffs conj (clojure.data/diff prev-replica new-replica))
-          (swap! state update :replicas (fn [replicas] (conj replicas new-replica))))
+          (swap! state (fn [st]
+                         (-> st 
+                             (update :log conj entry)
+                             (update :diffs conj (clojure.data/diff prev-replica new-replica))
+                             (update :replicas (fn [replicas] (conj replicas new-replica)))))))
         (recur (<!! ch))))))
 
 (defn slurp-edn [filename]
