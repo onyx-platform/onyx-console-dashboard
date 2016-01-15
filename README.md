@@ -5,9 +5,9 @@ A Clojure library designed to ... well, that part is up to you.
 ## Usage
 
 1. Install boot following these [instructions](https://github.com/boot-clj/boot#install).
-2. Download [dashboard script](https://raw.githubusercontent.com/onyx-platform/onyx-console-dashboard/master/onyx-dashboard.sh).
-3. `chmod +x onyx-dashboard.sh`
-4. ./onyx-dashboard.sh
+2. Download [dashboard script](https://raw.githubusercontent.com/onyx-platform/onyx-console-dashboard/master/onyx-dashboard).
+3. `chmod +x onyx-dashboard`
+4. ./onyx-dashboard
 
 Command line parameters:
 
