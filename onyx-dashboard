@@ -12,6 +12,9 @@
    f filter FILTER str "only show replicas that change by the supplied value"
    o onyx-version ONYXVERSION str "Onyx dependency version to use to play the log"]
 
-  (set-env! :dependencies [['org.onyxplatform/onyx (or onyx-version "0.8.4-SNAPSHOT")]])
+  (when-not onyx-version 
+    (throw (Exception. "Onyx dependency version must be supplied")))
+
+  (set-env! :dependencies [['org.onyxplatform/onyx onyx-version]])
 
   (start! src edn filter))

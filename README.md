@@ -15,27 +15,33 @@ Command line parameters:
 -s src: input type: jepsen, zookeeper, edn
 -e edn: edn input filename for use in combination with jepsen and edn src.
 -f filter: filter changes in the replica by keys/values that match this exact string.
--o onyx-version: pull in a specific version of Onyx to play log against e.g. 0.8.4-SNAPSHOT.
+-o onyx-version: specific version of Onyx to play log against e.g. 0.8.4-SNAPSHOT.
 ```
 
 Interface keys:
 
+
+*Navigation*
+
 ```
-q: quit
-escape: quit
 Up: previous log entry
 Down: next log entry
 Page Up: -10 log entries
 Page Down: +10 log entries
 j: scroll down
 k: scroll up
+```
+
+*Modes*
+```
 d: replica diff mode
 r: replica mode
+q: quit
+escape: quit
 ```
 
 ## License
 
 Copyright © 2015 FIXME
 
-Distributed under the Eclipse Public License either version 1.0 or (at
-your option) any later version.
+Distributed under the Eclipse Public License either version 1.0 or (at your option) any later version.
