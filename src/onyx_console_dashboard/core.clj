@@ -199,8 +199,10 @@
                  new-logs (mapv last filtered)]
              (assoc st :replicas new-replicas :diffs new-diffs :log new-logs)))))
 
-(defn start! [type src filtered]
-  (let [peer-config (read-string (slurp "peer-config.edn"))]
+(defn start! [type src filtered zookeeper-addr job-scheduler]
+  (let [peer-config {:zookeeper/address zookeeper-addr
+                     :onyx.peer/job-scheduler job-scheduler
+                     :onyx.messaging/impl :aeron}]
     (initialise-state! peer-config)
 
     (case type

@@ -8,13 +8,21 @@
 
 (defclifn -main
   [s src TYPE str "input type: jepsen, zookeeper, edn"
+   z zookeeper ZOOKEEPERADDR str "zookeeper address, required when src is zookeeper"
+   j job-scheduler JOBSCHEDULERTYPE str "job scheduler, either onyx.job-scheduler/greedy or onyx.job-scheduler/balanced"
    e edn PATH str "input filename"
    f filter FILTER str "only show replicas that change by the supplied value"
    o onyx-version ONYXVERSION str "Onyx dependency version to use to play the log"]
 
+  (when-not job-scheduler
+    (throw (Exception. "Job scheduler must be supplied. Call using -h for help.")))
+
   (when-not onyx-version 
-    (throw (Exception. "Onyx dependency version must be supplied")))
+    (throw (Exception. "Onyx dependency version must be supplied. Call using -h for help.")))
+  
+  (when (and (= src "zookeeper") (not zookeeper))
+    (throw (Exception. "zookeeper address must be supplied via -z when src is zookeeper. Call using -h for help.")))
 
   (set-env! :dependencies [['org.onyxplatform/onyx onyx-version]])
 
-  (start! src edn filter))
+  (start! src edn filter zookeeper (keyword job-scheduler)))
