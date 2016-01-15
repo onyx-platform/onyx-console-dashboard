@@ -18,6 +18,21 @@ Command line parameters:
 -o onyx-version: pull in a specific version of Onyx to play log against e.g. 0.8.4-SNAPSHOT.
 ```
 
+Interface keys:
+
+```
+q: quit
+escape: quit
+Up: previous log entry
+Down: next log entry
+Page Up: -10 log entries
+Page Down: +10 log entries
+j: scroll down
+k: scroll up
+d: replica diff mode
+r: replica mode
+```
+
 ## License
 
 Copyright © 2015 FIXME
