@@ -12,13 +12,14 @@ A Clojure library designed to ... well, that part is up to you.
 Command line parameters:
 
 ```
--s src: input type: jepsen, zookeeper, edn
--z zookeeper: zookeeper address, required when src is zookeeper
--e edn: edn input filename for use in combination with jepsen and edn src.
--f filter: filter changes in the replica by keys/values that match this exact string.
--o onyx-version: specific version of Onyx to play log against e.g. 0.8.4-SNAPSHOT.
--j job-scheduler: job scheduler, either onyx.job-scheduler/greedy or onyx.job-scheduler/balanced
-
+Options:
+  -h, --help                            Print this help info.
+  -s, --src TYPE                        Set input type: jepsen, zookeeper, edn to TYPE.
+  -z, --zookeeper ZOOKEEPERADDR         Set zookeeper address, required when src is zookeeper to ZOOKEEPERADDR.
+  -j, --job-scheduler JOBSCHEDULERTYPE  Set job scheduler, either onyx.job-scheduler/greedy or onyx.job-scheduler/balanced to JOBSCHEDULERTYPE.
+  -e, --edn PATH                        Set input filename to PATH.
+  -f, --filter FILTER                   Set only show replicas that change by the supplied value to FILTER.
+  -o, --onyx-version ONYXVERSION        Set onyx dependency version to use to play the log to ONYXVERSION.
 ```
 
 Interface keys:
