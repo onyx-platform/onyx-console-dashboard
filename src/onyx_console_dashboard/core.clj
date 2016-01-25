@@ -207,7 +207,7 @@
 
     (case type
       "edn" (import-peer-log! (slurp-edn src))
-      "jepsen" (import-peer-log! (:peer-log (slurp-edn src)))
+      "jepsen" (import-peer-log! (:peer-log (:information (:cluster-invariants (slurp-edn src)))))
       "zookeeper" (import-zookeeper! peer-config src)))
 
   (when filtered 
