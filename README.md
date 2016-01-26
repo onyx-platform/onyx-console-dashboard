@@ -1,6 +1,6 @@
 # onyx-console-dashboard
 
-A Clojure library designed to ... well, that part is up to you.
+A tool to view the Onyx log and replica changes over time.
 
 ## Usage
 
