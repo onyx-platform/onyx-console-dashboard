@@ -82,6 +82,16 @@
                                          \k (dec y)
                                          y))))
 
+(defn handle-copy! [key-val replica log-entry]
+  (let [clipboard (.getSystemClipboard (Toolkit/getDefaultToolkit))]
+    (cond (= key-val \c)
+          (let [sel (StringSelection. (pr-str replica))]
+            (.setContents clipboard sel nil))
+
+          (= key-val \l)
+          (let [sel (StringSelection. (pr-str log-entry))]
+            (.setContents clipboard sel nil)))))
+
 (defn handle-playback! [key-val]
   (swap! state 
          (fn [st] 
@@ -151,6 +161,8 @@
                                                     :colour :white}])
                    (= :replica (:mode @state)) (into [{:lines replica-lines
                                                        :colour :white}]))]
+
+      (handle-copy! key-val replica log-entry)
 
       (render-panels! panels (:scroll-offset @state))
       (s/redraw scr)

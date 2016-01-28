@@ -33,6 +33,8 @@ Page Up: -10 log entries
 Page Down: +10 log entries
 j: scroll down
 k: scroll up
+c: copy the current replica to the clipboard
+l: copy the current log entry to the clipboard
 ```
 
 *Modes*
