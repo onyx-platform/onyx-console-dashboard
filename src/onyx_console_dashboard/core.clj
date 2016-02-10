@@ -1,4 +1,5 @@
 (ns onyx-console-dashboard.core
+  (:gen-class)
   (:require [lanterna.screen :as s]
             [onyx.system]
             [onyx.extensions :as extensions]
@@ -6,7 +7,9 @@
             [clojure.data]
             [clojure.core.async :refer [chan >!! <!! close! alts!! timeout go]]
             [fipp.clojure :as fipp]
-            [onyx.log.replica :refer [base-replica]]))
+            [onyx.log.replica :refer [base-replica]])
+  (:import [java.awt Toolkit]
+           [java.awt.datatransfer StringSelection]))
 
 (def scr (s/get-screen))
 
@@ -186,6 +189,23 @@
                              (update :replicas conj new-replica)))))
         (recur (<!! ch))))))
 
+(defn dump-peer-log! [peer-config onyx-id]
+  (println "Dumping peer log to peer-log.edn")
+  (let [ch (chan)
+        started-sub (-> peer-config
+                        (assoc :onyx/id onyx-id)
+                        (onyx.api/subscribe-to-log ch))
+
+        log (loop [entries [] 
+                   [entry ch] (alts!! [ch (timeout 1000)] :priority true)]
+              (println "Read entry" entry)
+              (if entry
+                (recur (conj entries entry) 
+                       (alts!! [ch (timeout 1000)] :priority true))
+                entries))]
+    (spit "peer-log.edn" (pr-str log)))
+  (println "Done dumping peer log"))
+
 (defn slurp-edn [filename]
   (read-string (slurp filename)))
 
@@ -231,5 +251,10 @@
   (render-loop! scr))
 
 (defn -main
-  [& [type src filtered]]
-  (start! type src filtered))
+  [& [zookeeper-addr onyx-id job-scheduler]]
+  (dump-peer-log! {:zookeeper/address zookeeper-addr
+                   :onyx.peer/job-scheduler (keyword job-scheduler)
+                   :onyx.messaging/bind-addr "127.0.0.1"
+                   :onyx.messaging/impl :aeron}
+                  onyx-id)
+  (System/exit 0))
